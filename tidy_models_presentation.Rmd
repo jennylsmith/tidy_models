@@ -1,0 +1,376 @@
+---
+title: "Survival Analysis with Tidy Models"
+subtitle: "R in Pharma Recap 2021"
+author: "Jenny Leopoldina Smith"
+institute: "Fred Hutchinson Cancer Research Center"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+      self_contained: true
+---
+
+
+
+```{r setup, include=FALSE}
+knitr:::opts_chunk$set(comment = "", warning = FALSE, message = FALSE, echo = TRUE, tidy = TRUE, size="small")
+```
+
+name: intro
+
+# Introduction
+
+- Introduction of Time-to-event and Cox Proportional Hazards Regression Modeling with Tidy Models framework 
+
+
+--
+
+.pull-left[
+- Description of what I found interesting during the talk from RStudio 
+  - Max Kuhn and Hannah Frick
+
+- Beginning to attempt to incorporate Tidy Models in my own work
+  - pediatric acute myeloid leukemia (AML)
+]
+
+.pull-right[
+
+```{r eval = TRUE, echo=FALSE, out.height = "350px", out.width="375px"}
+knitr::include_graphics(path = "logos/tidy_models.png")
+```
+
+]
+
+---
+
+background-image: url(logos/tidyverse.png)
+background-position: top right
+background-size: 35% 50%
+
+# What is the Tidyverse?
+
+--
+
+- From the documentation: 
+  - The tidyverse is an opinionated collection of <br> R packages designed for data science. 
+
+--
+
+- The tidyverse syntax relys on the use of a `%>%` pipe, <br> which allows for:
+  - modularity 
+  - readablility 
+
+
+````markdown
+```{r}`r ''`
+library(dplyr)
+mean_mass_by_homeworld <- starwars %>% 
+  mutate(bmi = mass / ((height / 100)  ^ 2)) %>%
+  select(name:mass, bmi, homeworld) %>% 
+  group_by(homeworld) %>% 
+  summarize(mean_mass=mean(mass)) %>% 
+  ungroup() %>% 
+  arrange(desc(mass))
+```
+````
+---
+
+
+# In comparison 
+
+````markdown
+```{r}`r ''`
+#base R
+starwars$bmi <- bmi = mass / ((height / 100)  ^ 2)
+columns_sel <- c(1:3, grep("bmi|homeworld", colnames(starwars)))
+starwars <- starwars[,columns_sel]
+mean_mass_by_homeworld <- tapply(starwars$mass, 
+                                  starwars$homeworld, 
+                                  FUN=mean)
+reordered <- order(mean_mass_by_homeworld, decreasing=TRUE)
+mean_mass_by_homeworld <- mean_mass_by_homeworld[reordered]
+```
+````
+
+.footnote[
+[1] [Tidyverse Landing Page](https://www.tidyverse.org/)
+]
+
+---
+
+background-image: url(logos/tidy_models.png)
+background-position: bottom right
+background-size: 30% 45%
+
+# Tidy Models 
+
+- What are tidy models? 
+
+--
+  - The `tidymodels` framework is a collection of packages for modeling and machine learning using tidyverse principles.
+--
+
+- As with tidyverse
+    - it includes numerous packages
+    - you can pick and choose to install to complete your specific analysis
+    - except of course for core packages
+--
+
+.pull-left[
+- Why Tidy models?
+  - Consistent interface for modeling functions
+  - resampling, assessing performance, and hyperparameter tuning.
+  - Performance metrics (in the yardstick package)
+  - Model tuning (with the tune package)
+]
+
+
+---
+
+background-image: url(https://parsnip.tidymodels.org/reference/figures/logo.png)
+background-position: top right
+background-size: 22.5% 25%
+
+# Survival Analysis 
+
+- `censored` package along with `parsnip` package
+
+  - `parsnip` is one of the core R packages in the Tidy Models framework
+
+- First, survival and time-to-event analysis uses censored data.
+
+--
+  - **right censored**:  Patient enrolled on study and diagnosed on 12/20/2020 and is still alive at 12/06/2021
+
+--
+
+  - **left censored**: Patient was on trial on 12/20/2020, but don't know when they were diagnosed, and  was relapsed (event) by 12/06/2021
+
+--
+
+  - **interval censoring**: Patient was on trial on 12/20/2020, but don't know when they were diagnosed,and was not relapsed by 12/06/2021
+
+
+.footnote[
+[1] [Parsnip Landing Page](https://parsnip.tidymodels.org/)
+]
+
+
+---
+
+# Cox Proportional Hazards Regression 
+
+--
+- A regression model commonly used in biomedical research
+
+--
+
+- The association between the survival time of patients and one or more predictor variables.
+
+--
+
+- It provides a means to estimate the risk (hazard) of the predictor variables between 2 or more groups.
+
+--
+
+  - For example, Patient Group A has **mutation A** and Patient group B has **no mutation**
+  
+  - Cox PH model can help associate if **mutation A** has higher incidence of events (relapse, death, etc) compared to **no mutation**
+  
+  - Results: Presence of **mutation A** is associated with a 2x increased risk of death from the time of diagnosis (hazard ratio = 2.0, 95% CI = 1.5-2.2, p-value=0.05)
+
+---
+
+# Cox Proportional Hazards Regression: libraries
+
+- CPH can be used to relate many risk factors and variables  simultaneously to survival time. 
+- Here, I will present a univariate CPH model for simplicity. 
+
+```{r}
+library(tidymodels)
+library(censored)
+library(survival)
+str(aml) #dataframe provided withthe survival package
+```
+
+---
+
+# Cox Proportional Hazards Regression 
+
+- Note `Surv(time, status)` is from the survival package and calculate Kaplan-Meier estimates which take into account censoring (right, left, interval) 
+
+```{r}
+tidymodels_prefer() # to prevent common clashes
+
+cph_fit <-
+  proportional_hazards(engine = "survival") %>% 
+  fit(Surv(time, status) ~ x, data = aml)
+
+cph_fit
+```
+
+---
+
+# Cox Proportional Hazards Regression 
+
+```{r}
+# cox proportional Hazards
+cph_fit2 <- coxph(Surv(time, status) ~ x, data = aml)
+    
+cph_fit2
+```
+
+---
+
+# Cox Proportional Hazards Regression
+
+```{r}
+summary(cph_fit2) 
+```
+
+---
+
+# Cox Proportional Hazards Regression
+
+.center[**Versus**]
+
+```{r}
+tidy(cph_fit)
+```
+
+---
+
+# Predict with New Data
+
+- First, simulate some patient outcome data 
+
+```{r}
+set.seed(1)
+new_data <- tibble(Patient=paste0("p",1:10),
+                   time=sample(3:200, size=10), 
+                   status=sample(c(1,0), size=10, replace = T, prob=c(0.3,0.7)), 
+                   x=sample(c("Maintained","Nonmaintained"), size=10, replace=T) %>% 
+                     factor(., levels=levels(aml$x)))
+
+head(new_data)
+```
+
+---
+
+# Predict with New Data
+
+- Predict the survival probabilities (type = "survival") at given times (times argument)
+
+```{r}
+times <- seq(0,72, by=6)
+
+prediction_df <- predict(cph_fit, new_data, type = "survival", time = times) %>% 
+  bind_cols(new_data) %>%
+  unnest(cols = c(.pred)) %>% 
+  group_by(Patient) %>% 
+  mutate(n_pred=1:n()) %>% 
+  ungroup() 
+
+head(prediction_df)
+```
+
+- Note: `unnest()` flattens columns that contain list into regular columns
+
+---
+
+# Predict with New Data
+
+- Visualize the data with `geom_step` to create a Kaplan-Meier curve. 
+
+```{r fig.align='center', fig.height=5, fig.width=7}
+prediction_df %>% 
+  ggplot(aes(x = .time, y = .pred_survival, group = x, 
+             col = x)) +
+  geom_step(lwd = 1.25) + 
+  labs(x = "Time (months)", y = "Survival Probability") +
+  theme_classic()
+```
+
+---
+
+# More Advanced Models 
+
+- regularized cox proportional hazards models 
+- compare to [`glmnet`](https://cran.r-project.org/web/packages/glmnet/vignettes/Coxnet.pdf) R package 
+  - much more difficult interface in `glmnet`
+
+````markdown
+```{r}`r ''`
+cph_glmnet_strata_fit <-
+  proportional_hazards(penalty = 0.1, mixture = 0.75) %>%
+  set_engine("glmnet") %>%
+  fit(Surv(age, adopted) ~ . + strata(sex), data = dogs)
+```
+````
+
+---
+
+
+# More Advanced Models 
+
+- for example, using decisions trees 
+  - boost_tree()
+  - decision_tree()
+  - rand_forest()
+
+````markdown
+```{r}`r ''`
+bag_fit <-
+  bag_tree() %>% #defines an ensemble of decision trees.
+  set_mode("censored regression") %>%
+  set_engine("rpart", times = 50) %>%
+  fit(Surv(age, adopted) ~ ., data = dogs)
+```
+````
+
+---
+
+# Upcoming Support in Survival Analysis 
+
+--
+
+- A role for censoring indicator columns and a step `step_surv()` in recipes.
+--
+
+- A new ROC metric for survival models in `yardstick`.
+--
+
+- An adaption of workflows and `tune` is to follow after that.
+
+.footnote[
+[1] [Parsnip blog](https://www.tidyverse.org/blog/2021/11/survival-analysis-parsnip-adjacent/)
+]
+
+---
+
+# References
+
+- [Tidyverse](https://www.tidyverse.org/ )
+- [Tidy Models](https://www.tidymodels.org/)
+- Tidy models [bookdown](https://www.tmwr.org/)
+- Vignette with `censored` [package](https://rsample.tidymodels.org/articles/Applications/Survival_Analysis.html)
+- R in pharma Survival Analysis [presentation](https://topepo.github.io/2021-r-pharma/index.html#1)
+- R in pharma [youtube](https://www.youtube.com/c/RinPharma)
+
+---
+
+
+name: end
+class: center middle
+# Questions?
+
+Please feel free to contact me: *JennyL.Smith12 [at] gmail.com*
+  
+.footnote[
+    [1] Slides created with the R package [**xaringan**](https://github.com/yihui/xaringan).
+]
+
